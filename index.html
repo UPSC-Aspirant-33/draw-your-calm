@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Draw Your Stress Away 🎨</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{height:100vh;background:#0d1b2a;font-family:'Segoe UI',sans-serif;color:#fff;display:flex;flex-direction:column;overflow:hidden;}
+.toolbar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:rgba(255,255,255,0.06);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.1);flex-wrap:wrap;z-index:20;}
+.toolbar-title{font-size:1rem;font-weight:700;background:linear-gradient(90deg,#00ffd5,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-right:8px;}
+.color-palette{display:flex;gap:6px;align-items:center;}
+.swatch{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all 0.2s;flex-shrink:0;}
+.swatch:hover,.swatch.active{border-color:#fff;transform:scale(1.2);}
+.color-input{width:32px;height:32px;border:none;border-radius:8px;cursor:pointer;background:none;padding:0;}
+.sep{width:1px;height:32px;background:rgba(255,255,255,0.15);}
+.tool-btn{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:6px 14px;border-radius:14px;cursor:pointer;font-size:0.8rem;transition:all 0.3s;white-space:nowrap;}
+.tool-btn:hover,.tool-btn.active{background:#00ffd5;color:#0d1b2a;border-color:#00ffd5;font-weight:700;}
+.size-wrap{display:flex;align-items:center;gap:6px;font-size:0.75rem;opacity:0.7;}
+.size-wrap input[type=range]{width:70px;accent-color:#00ffd5;}
+.size-preview{width:20px;height:20px;display:flex;align-items:center;justify-content:center;}
+.size-dot{background:#fff;border-radius:50%;transition:all 0.2s;}
+canvas#draw{display:block;flex:1;cursor:crosshair;touch-action:none;}
+.undo-hint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.5);padding:6px 16px;border-radius:20px;font-size:0.75rem;opacity:0.5;pointer-events:none;}
+.effects-bar{display:flex;gap:6px;}
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <div class="toolbar-title">✨ Doodle Relax</div>
+  <div class="color-palette">
+    <div class="swatch active" style="background:#00ffd5" onclick="setColor('#00ffd5',this)"></div>
+    <div class="swatch" style="background:#a78bfa" onclick="setColor('#a78bfa',this)"></div>
+    <div class="swatch" style="background:#fbbf24" onclick="setColor('#fbbf24',this)"></div>
+    <div class="swatch" style="background:#f472b6" onclick="setColor('#f472b6',this)"></div>
+    <div class="swatch" style="background:#34d399" onclick="setColor('#34d399',this)"></div>
+    <div class="swatch" style="background:#fb7185" onclick="setColor('#fb7185',this)"></div>
+    <div class="swatch" style="background:#fff" onclick="setColor('#fff',this)"></div>
+    <input type="color" class="color-input" id="customColor" value="#00ffd5" oninput="setColor(this.value,null)">
+  </div>
+  <div class="sep"></div>
+  <div class="size-wrap">
+    🖊
+    <input type="range" id="brushSize" min="1" max="40" value="6" oninput="updateSize()">
+    <div class="size-preview"><div class="size-dot" id="sizeDot"></div></div>
+  </div>
+  <div class="sep"></div>
+  <div class="effects-bar">
+    <button class="tool-btn active" id="btn-pen" onclick="setTool('pen')">✏️ Pen</button>
+    <button class="tool-btn" id="btn-glow" onclick="setTool('glow')">✨ Glow</button>
+    <button class="tool-btn" id="btn-spray" onclick="setTool('spray')">💨 Spray</button>
+    <button class="tool-btn" id="btn-eraser" onclick="setTool('eraser')">⬜ Erase</button>
+  </div>
+  <div class="sep"></div>
+  <button class="tool-btn" onclick="undo()">↩ Undo</button>
+  <button class="tool-btn" onclick="clearCanvas()">🗑 Clear</button>
+  <button class="tool-btn" onclick="saveCanvas()">💾 Save</button>
+</div>
+<canvas id="draw"></canvas>
+<div class="undo-hint">Tip: Use Ctrl+Z to undo • Draw freely, no rules!</div>
+<script>
+const canvas=document.getElementById('draw');
+const ctx=canvas.getContext('2d');
+let color='#00ffd5',size=6,tool='pen',drawing=false;
+let history=[],historyIdx=-1;
+let sprayInterval=null;
+
+function resize(){
+  const saved=ctx.getImageData(0,0,canvas.width,canvas.height);
+  canvas.width=canvas.offsetWidth||window.innerWidth;
+  canvas.height=canvas.offsetHeight||window.innerHeight-80;
+  if(historyIdx>=0)ctx.putImageData(history[historyIdx],0,0);
+}
+resize();window.addEventListener('resize',resize);
+
+function saveState(){
+  history=history.slice(0,historyIdx+1);
+  history.push(ctx.getImageData(0,0,canvas.width,canvas.height));
+  if(history.length>30)history.shift();
+  else historyIdx++;
+}
+function undo(){if(historyIdx>0){historyIdx--;ctx.putImageData(history[historyIdx],0,0);}else if(historyIdx===0){ctx.clearRect(0,0,canvas.width,canvas.height);historyIdx=-1;}}
+
+function setColor(c,swatch){color=c;document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));if(swatch)swatch.classList.add('active');}
+function updateSize(){size=+document.getElementById('brushSize').value;const d=document.getElementById('sizeDot');d.style.width=d.style.height=Math.min(size,24)+'px';}
+function setTool(t){tool=t;document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));document.getElementById('btn-'+t).classList.add('active');}
+updateSize();
+
+function getPos(e){
+  const r=canvas.getBoundingClientRect();
+  if(e.touches)return{x:e.touches[0].clientX-r.left,y:e.touches[0].clientY-r.top};
+  return{x:e.clientX-r.left,y:e.clientY-r.top};
+}
+
+function startDraw(e){
+  e.preventDefault();
+  const {x,y}=getPos(e);
+  drawing=true;
+  saveState();
+  ctx.beginPath();ctx.moveTo(x,y);
+  if(tool==='spray'){sprayInterval=setInterval(()=>spray(x,y),30);}
+}
+function draw(e){
+  e.preventDefault();
+  if(!drawing)return;
+  const {x,y}=getPos(e);
+  if(tool==='pen'){
+    ctx.lineWidth=size;ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.strokeStyle=color;ctx.shadowColor='transparent';ctx.shadowBlur=0;
+    ctx.globalCompositeOperation='source-over';
+    ctx.lineTo(x,y);ctx.stroke();
+  }else if(tool==='glow'){
+    ctx.lineWidth=size*0.5;ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.strokeStyle=color;ctx.shadowColor=color;ctx.shadowBlur=size*2;
+    ctx.globalCompositeOperation='source-over';
+    ctx.lineTo(x,y);ctx.stroke();
+    ctx.shadowBlur=0;
+  }else if(tool==='eraser'){
+    ctx.globalCompositeOperation='destination-out';
+    ctx.lineWidth=size*2;ctx.lineCap='round';
+    ctx.lineTo(x,y);ctx.stroke();
+    ctx.globalCompositeOperation='source-over';
+  }else if(tool==='spray'){
+    // update spray pos
+    if(sprayInterval)clearInterval(sprayInterval);
+    sprayInterval=setInterval(()=>spray(x,y),30);
+  }
+}
+function stopDraw(e){
+  drawing=false;
+  if(sprayInterval){clearInterval(sprayInterval);sprayInterval=null;}
+  ctx.beginPath();ctx.shadowBlur=0;ctx.globalCompositeOperation='source-over';
+}
+function spray(x,y){
+  if(!drawing)return;
+  for(let i=0;i<15;i++){
+    const a=Math.random()*Math.PI*2;const r=Math.random()*size*2;
+    const sx=x+Math.cos(a)*r,sy=y+Math.sin(a)*r;
+    ctx.beginPath();ctx.arc(sx,sy,Math.random()*1.5+0.5,0,Math.PI*2);
+    ctx.fillStyle=color;ctx.globalAlpha=Math.random()*0.7+0.1;
+    ctx.fill();ctx.globalAlpha=1;
+  }
+}
+
+canvas.addEventListener('mousedown',startDraw);canvas.addEventListener('mousemove',draw);canvas.addEventListener('mouseup',stopDraw);canvas.addEventListener('mouseleave',stopDraw);
+canvas.addEventListener('touchstart',startDraw,{passive:false});canvas.addEventListener('touchmove',draw,{passive:false});canvas.addEventListener('touchend',stopDraw);
+
+document.addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='z')undo();});
+
+function clearCanvas(){if(confirm('Clear the canvas?')){saveState();ctx.clearRect(0,0,canvas.width,canvas.height);}}
+function saveCanvas(){const a=document.createElement('a');a.download='my-doodle-'+Date.now()+'.png';a.href=canvas.toDataURL();a.click();}
+</script>
+</body>
+</html>
